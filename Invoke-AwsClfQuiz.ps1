@@ -1,13 +1,50 @@
 ﻿<#
 AWS Cloud Practitioner Practice Exam Quizzer
-- Defaults to OneDrive Desktop path under the current user profile
-- Prompts you to select practice-exam-1..24.md (or pass -ExamNumber)
-- Asks each question interactively
-- Immediate feedback after each question (correct/wrong)
-- If wrong: prints Explanation + Reference from the .md
-- End: shows score + weak areas summary (no missed-questions dump)
-- Weak-areas store is resilient (hashtable-safe) to avoid ContainsKey/Property errors
+
+What this script does
+- Loads one of the practice-exam-1..24.md files.
+- Asks each question in the terminal, one by one.
+- Gives immediate feedback (correct / wrong).
+- If wrong, shows the Explanation and Reference from the .md file. (if the .md file has the explanation and reference added)
+- At the end, shows your score and a weak-areas summary stored on your machine.
+
+Where to put the files
+- Clone the repo or copy all files into:
+  %USERPROFILE%\Desktop\Amazon\practice-exam
+  Examples:
+    C:\Users\alice\Desktop\Amazon\practice-exam
+    C:\Users\bob\Desktop\Amazon\practice-exam
+
+- The practice exam files must be named:
+  practice-exam-1.md, practice-exam-2.md, ..., practice-exam-24.md  You can download them from the practice-exam repository
+
+- By default, the script will:
+  - Use: %USERPROFILE%\Desktop\Amazon\practice-exam
+  - Automatically create that folder if it does not exist.
+
+How to run
+- Open PowerShell.
+- Change to the folder where Invoke-AwsClfQuiz.ps1 lives, for example:
+    cd "$env:USERPROFILE\Desktop\Amazon"
+- Then run:
+    .\Invoke-AwsClfQuiz.ps1
+  The script will prompt you to choose an exam number (1–24).
+
+Optional parameters
+- To run a specific exam directly (no prompt):
+    .\Invoke-AwsClfQuiz.ps1 -ExamNumber 5
+
+- To use a different location for the exam files:
+    .\Invoke-AwsClfQuiz.ps1 -ExamPath "D:\CLF-02-Study-Guide\practice-exam"
+
+Notes
+- Weak-areas history is stored under:
+    $env:APPDATA\AwsClfQuiz\weak-areas.json
+  This is per-user and does not affect anyone else.
+
+  Creator Justin Whitehead version 1.2
 #>
+
 
 [CmdletBinding()]
 param(

@@ -42,19 +42,54 @@ Notes
     $env:APPDATA\AwsClfQuiz\weak-areas.json
   This is per-user and does not affect anyone else.
 
-  Creator Justin Whitehead version 1.2
+  Creator Justin Whitehead version 1.3
 #>
 
 
 [CmdletBinding()]
 param(
   [Parameter()]
-  [string]$ExamPath = (Join-Path $env:USERPROFILE "Desktop\Amazon\practice-exam"),
+  [string]$ExamPath = $null,
 
   [Parameter()]
   [ValidateRange(1,24)]
   [int]$ExamNumber
 )
+
+function Get-DefaultExamPath {
+    param(
+        [string]$SubPath = "Amazon\practice-exam"
+    )
+
+    $candidates = @()
+
+    # 1. OneDrive for work/school (commonly used in companies)
+    if ($env:OneDriveCommercial) {
+        $candidates += (Join-Path $env:OneDriveCommercial ("Desktop\" + $SubPath))
+    }
+
+    # 2. Personal OneDrive
+    if ($env:OneDrive) {
+        $candidates += (Join-Path $env:OneDrive ("Desktop\" + $SubPath))
+    }
+
+    # 3. Plain Desktop under user profile
+    $candidates += (Join-Path $env:USERPROFILE ("Desktop\" + $SubPath))
+
+    foreach ($p in $candidates) {
+        if (Test-Path $p) {
+            return $p
+        }
+    }
+
+    throw "Could not automatically locate exam folder. Checked:`n  " +
+          ($candidates -join "`n  ") +
+          "`nPass -ExamPath explicitly."
+}
+
+if (-not $ExamPath) {
+    $ExamPath = Get-DefaultExamPath
+}
 
 function Ensure-ExamPath {
   param(

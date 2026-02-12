@@ -12,12 +12,28 @@ AWS Cloud Practitioner Practice Exam Quizzer
 [CmdletBinding()]
 param(
   [Parameter()]
-  [string]$ExamPath = (Join-Path $env:USERPROFILE "OneDrive\Desktop\Amazon\practice-exam"),
+  [string]$ExamPath = (Join-Path $env:USERPROFILE "Desktop\Amazon\practice-exam"),
 
   [Parameter()]
   [ValidateRange(1,24)]
   [int]$ExamNumber
 )
+
+function Ensure-ExamPath {
+  param(
+    [Parameter(Mandatory)][string]$Path
+  )
+
+  if (-not (Test-Path $Path)) {
+    New-Item -ItemType Directory -Path $Path -Force | Out-Null
+  }
+
+  return (Get-Item -LiteralPath $Path).FullName
+}
+
+# Normalize and ensure exam path exists
+$ExamPath = Ensure-ExamPath -Path $ExamPath
+
 
 function Normalize-AnswerSet {
   param([Parameter(Mandatory)][string]$AnswerText)
@@ -59,7 +75,7 @@ function Get-ExamFileByNumber {
     [Parameter(Mandatory)][ValidateRange(1,24)][int]$Number
   )
 
-  if (-not (Test-Path $Path)) { throw "Exam path not found: $Path" }
+#  if (-not (Test-Path $Path)) { throw "Exam path not found: $Path" }
 
   $fileName = "practice-exam-$Number.md"
   $fullPath = Join-Path $Path $fileName

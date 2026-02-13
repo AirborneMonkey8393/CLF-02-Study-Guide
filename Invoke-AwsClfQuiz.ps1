@@ -42,7 +42,7 @@ Notes
     $env:APPDATA\AwsClfQuiz\weak-areas.json
   This is per-user and does not affect anyone else.
 
-  Creator Justin Whitehead version 1.4
+  Creator Justin Whitehead version 1.5
 #>
 
 
@@ -167,17 +167,18 @@ function Parse-Exam {
   foreach ($line in $lines) {
     $l = $line.Trim()
 
-    # New question with optional domain tag
-    # Matches: "1. [domain:Security & Identity] Question text"
-    # Or: "1. Question text"
-    if ($l -match '^(?<num>\d+)\.\s+(?:\[domain:(?<domain>[^\]]+)\]\s+)?(?<q>.+)$') {
+    # Match question number with optional domain tag (question text may be on next line)
+    # Format 1: "1. [domain:Something] Question text"
+    # Format 2: "1. [domain:Something]  " (with question on next line)
+    # Format 3: "1. Question text" (no domain tag)
+    if ($l -match '^(?<num>\d+)\.\s+(?:\[domain:(?<domain>[^\]]+)\]\s*)?(?<q>.*)$') {
       if ($null -ne $current -and $current.CorrectRaw) {
         $questions.Add([pscustomobject]$current)
       }
 
       $current = @{
         Number      = [int]$Matches['num']
-        Question    = $Matches['q']
+        Question    = $Matches['q'].Trim()  # Might be empty if question is on next line
         Domain      = if ($Matches['domain']) { $Matches['domain'].Trim() } else { $null }
         Options     = New-Object System.Collections.Generic.List[string]
         CorrectRaw  = $null
@@ -242,9 +243,16 @@ function Parse-Exam {
       continue
     }
 
-    # Question stem continuation
+    # Question stem continuation (for questions that span multiple lines)
+    # Only append if we haven't started reading options yet
     if ($current.Options.Count -eq 0 -and -not $current.CorrectRaw -and $l.Length -gt 0 -and -not $l.StartsWith("<")) {
-      $current.Question = ($current.Question + " " + $l).Trim()
+      if ($current.Question.Length -eq 0) {
+        # First line of question text (when question was on separate line)
+        $current.Question = $l
+      } else {
+        # Additional lines of question text
+        $current.Question = ($current.Question + " " + $l).Trim()
+      }
     }
   }
 
@@ -506,7 +514,7 @@ function Update-WeakAreasStore {
   foreach ($r in $Results) {
     # Use explicit domain from parsed question, fallback to classification
     $domain = Classify-QuestionDomain -Text $r.Question -ExplicitDomain $r.Domain
-    
+
     if (-not $session.breakdown.ContainsKey($domain)) {
       $session.breakdown[$domain] = @{ correct = 0; wrong = 0 }
     }
@@ -572,20 +580,6 @@ Write-Host "===================="
 
 $store = Update-WeakAreasStore -Results $results -ExamName $examFile.Name
 $storePath = Get-WeakAreasStorePath
-
-# Add this diagnostic output right before the weak areas summary
-# Insert around line 570 (after Update-WeakAreasStore but before displaying results)
-
-Write-Host ""
-Write-Host "=== DIAGNOSTIC INFO ===" -ForegroundColor Cyan
-Write-Host "Domains found in this session:"
-foreach ($r in $results) {
-    $domain = if ($r.Domain) { $r.Domain } else { Classify-QuestionDomain -Text $r.Question }
-    Write-Host ("  Q{0}: Domain='{1}' (Explicit: {2})" -f $r.Number, $domain, ($null -ne $r.Domain))
-}
-Write-Host "=======================" -ForegroundColor Cyan
-Write-Host ""
-
 
 Write-Host ""
 Write-Host "Weak areas (lifetime, by domain):"

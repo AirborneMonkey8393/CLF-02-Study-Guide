@@ -5,7 +5,7 @@ What this script does
 - Loads one of the practice-exam-1..24.md files.
 - Asks each question in the terminal, one by one.
 - Gives immediate feedback (correct / wrong).
-- If wrong, shows the Explanation and Reference from the .md file. (if the .md file has the explanation and reference added)
+- If wrong, shows the Explanation and Reference from the .md file.
 - At the end, shows your score and a weak-areas summary stored on your machine.
 
 Where to put the files
@@ -16,7 +16,7 @@ Where to put the files
     C:\Users\bob\Desktop\Amazon\practice-exam
 
 - The practice exam files must be named:
-  practice-exam-1.md, practice-exam-2.md, ..., practice-exam-24.md  You can download them from the practice-exam repository
+  practice-exam-1.md, practice-exam-2.md, ..., practice-exam-24.md
 
 - By default, the script will:
   - Use: %USERPROFILE%\Desktop\Amazon\practice-exam
@@ -42,7 +42,7 @@ Notes
     $env:APPDATA\AwsClfQuiz\weak-areas.json
   This is per-user and does not affect anyone else.
 
-  Creator Justin Whitehead version 1.3
+  Creator Justin Whitehead version 1.4
 #>
 
 
@@ -147,8 +147,6 @@ function Get-ExamFileByNumber {
     [Parameter(Mandatory)][ValidateRange(1,24)][int]$Number
   )
 
-#  if (-not (Test-Path $Path)) { throw "Exam path not found: $Path" }
-
   $fileName = "practice-exam-$Number.md"
   $fullPath = Join-Path $Path $fileName
 
@@ -169,8 +167,10 @@ function Parse-Exam {
   foreach ($line in $lines) {
     $l = $line.Trim()
 
-    # New question
-    if ($l -match '^(?<num>\d+)\.\s+(?<q>.+)$') {
+    # New question with optional domain tag
+    # Matches: "1. [domain:Security & Identity] Question text"
+    # Or: "1. Question text"
+    if ($l -match '^(?<num>\d+)\.\s+(?:\[domain:(?<domain>[^\]]+)\]\s+)?(?<q>.+)$') {
       if ($null -ne $current -and $current.CorrectRaw) {
         $questions.Add([pscustomobject]$current)
       }
@@ -178,6 +178,7 @@ function Parse-Exam {
       $current = @{
         Number      = [int]$Matches['num']
         Question    = $Matches['q']
+        Domain      = if ($Matches['domain']) { $Matches['domain'].Trim() } else { $null }
         Options     = New-Object System.Collections.Generic.List[string]
         CorrectRaw  = $null
         Explanation = $null
@@ -212,7 +213,7 @@ function Parse-Exam {
     }
 
     if ($inAnswerBlock) {
-      if ($l -match '^\s*Correct\s+Answer:\s*(.+)$') {
+      if ($l -match '^\s*Correct\s+[Aa]nswer:\s*(.+)$') {
         $current.CorrectRaw = $Matches[1].Trim()
         continue
       }
@@ -319,6 +320,7 @@ function Ask-Question {
     return [pscustomobject]@{
       Number     = $QObj.Number
       Question   = $QObj.Question
+      Domain     = $QObj.Domain
       YourAnswer = ($respSet -join ',')
       Correct    = ($correctSet -join ',')
       IsCorrect  = $isCorrect
@@ -326,30 +328,20 @@ function Ask-Question {
   }
 }
 
-# --- Weak Area Tracking (keyword-based) ---
-
-#function Classify-QuestionDomain {
-#  param([Parameter(Mandatory)][string]$Text)
-
-#  $t = $Text.ToLowerInvariant()
-
-#  if ($t -match '\b(iam|role|policy|mfa|least privilege|kms|encryption|waf|shield|guardduty|inspector|macie|security group|nacl)\b') { return "Security & Identity" }
-#  if ($t -match '\b(ec2|lambda|containers?|ecs|eks|fargate|batch|elastic beanstalk|lightsail)\b') { return "Compute" }
-#  if ($t -match '\b(s3|efs|fsx|ebs|glacier|storage gateway|snow(ball|cone)|backup)\b') { return "Storage" }
-#  if ($t -match '\b(vpc|route 53|cloudfront|elb|alb|nlb|direct connect|vpn|subnet|nat gateway)\b') { return "Networking & CDN" }
-#  if ($t -match '\b(rds|dynamodb|aurora|redshift|elasticache|documentdb|neptune)\b') { return "Databases" }
-#  if ($t -match '\b(cloudwatch|cloudtrail|config|systems manager|x-ray|organizations|control tower)\b') { return "Monitoring & Management" }
-#  if ($t -match '\b(pricing|cost|tco|budgets|cost explorer|savings plans|reserved instances|spot)\b') { return "Billing & Pricing" }
-#  if ($t -match '\b(well-architected|ha|high availability|fault tolerant|disaster recovery|rto|rpo|scal(e|ing)|multi-az)\b') { return "Architecture & Resilience" }
-
-#  return "Other / Unclassified"
-#}
+# --- Weak Area Tracking (using explicit domain tags) ---
 
 function Classify-QuestionDomain {
   param(
-    [Parameter(Mandatory)][string]$Text
+    [Parameter(Mandatory)][string]$Text,
+    [string]$ExplicitDomain = $null
   )
 
+  # Use explicit domain tag if provided
+  if ($ExplicitDomain) { 
+    return $ExplicitDomain 
+  }
+
+  # Fallback to keyword matching if no domain tag found
   $t = $Text.ToLower()
 
   # Security, Identity & Compliance
@@ -394,7 +386,22 @@ function Classify-QuestionDomain {
 
   # AI / ML & Application Integration
   if ($t -match '\b(sagemaker|rekognition|comprehend|polly|lex\b|transcribe|translate|textract|kendra|amazon q\b|machine learning|ml\b|ai\b|artificial intelligence|sqs\b|simple queue service|sns\b|simple notification service|eventbridge|event bridge|step function[s]?|appsync|graphql)\b') {
-    return "AI, ML & Integration"
+    return "Machine Learning"
+  }
+
+  # Developer Tools
+  if ($t -match '\b(codecommit|codebuild|codedeploy|codepipeline|codestar|code(commit|build|deploy|pipeline|star)|cloud9|cloudshell)\b') {
+    return "Developer Tools"
+  }
+
+  # End User Computing
+  if ($t -match '\b(workspaces|appstream|connect\b|amazon connect)\b') {
+    return "End User Computing"
+  }
+
+  # Application Integration
+  if ($t -match '\b(sqs\b|sns\b|eventbridge|step functions|appsync)\b') {
+    return "Application Integration"
   }
 
   return "Other / Unclassified"
@@ -497,7 +504,9 @@ function Update-WeakAreasStore {
   }
 
   foreach ($r in $Results) {
-    $domain = Classify-QuestionDomain -Text $r.Question
+    # Use explicit domain from parsed question, fallback to classification
+    $domain = Classify-QuestionDomain -Text $r.Question -ExplicitDomain $r.Domain
+    
     if (-not $session.breakdown.ContainsKey($domain)) {
       $session.breakdown[$domain] = @{ correct = 0; wrong = 0 }
     }
@@ -564,9 +573,23 @@ Write-Host "===================="
 $store = Update-WeakAreasStore -Results $results -ExamName $examFile.Name
 $storePath = Get-WeakAreasStorePath
 
+# Add this diagnostic output right before the weak areas summary
+# Insert around line 570 (after Update-WeakAreasStore but before displaying results)
+
 Write-Host ""
-Write-Host "Weak areas (lifetime, by inferred domain):"
-Write-Host "-----------------------------------------"
+Write-Host "=== DIAGNOSTIC INFO ===" -ForegroundColor Cyan
+Write-Host "Domains found in this session:"
+foreach ($r in $results) {
+    $domain = if ($r.Domain) { $r.Domain } else { Classify-QuestionDomain -Text $r.Question }
+    Write-Host ("  Q{0}: Domain='{1}' (Explicit: {2})" -f $r.Number, $domain, ($null -ne $r.Domain))
+}
+Write-Host "=======================" -ForegroundColor Cyan
+Write-Host ""
+
+
+Write-Host ""
+Write-Host "Weak areas (lifetime, by domain):"
+Write-Host "----------------------------------"
 
 $domainRows = foreach ($k in $store.domains.Keys) {
   $d = $store.domains[$k]
